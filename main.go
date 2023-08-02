@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"common/models"
 	"common/requests"
@@ -17,141 +16,98 @@ import (
 	"github.com/joho/godotenv"
 )
 
-const ()
-
-func check(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-type DellResponse struct {
-	AccessToken string
-}
-
-type DellAsset []struct {
-	ID                     int       `json:"id"`
-	ServiceTag             string    `json:"serviceTag"`
-	OrderBuid              int       `json:"orderBuid"`
-	ShipDate               time.Time `json:"shipDate"`
-	ProductCode            string    `json:"productCode"`
-	LocalChannel           string    `json:"localChannel"`
-	ProductID              any       `json:"productId"`
-	ProductLineDescription string    `json:"productLineDescription"`
-	ProductFamily          any       `json:"productFamily"`
-	SystemDescription      any       `json:"systemDescription"`
-	ProductLobDescription  string    `json:"productLobDescription"`
-	CountryCode            string    `json:"countryCode"`
-	Duplicated             bool      `json:"duplicated"`
-	Invalid                bool      `json:"invalid"`
-	Entitlements           []struct {
-		ItemNumber              string    `json:"itemNumber"`
-		StartDate               time.Time `json:"startDate"`
-		EndDate                 time.Time `json:"endDate"`
-		EntitlementType         string    `json:"entitlementType"`
-		ServiceLevelCode        string    `json:"serviceLevelCode"`
-		ServiceLevelDescription string    `json:"serviceLevelDescription"`
-		ServiceLevelGroup       int       `json:"serviceLevelGroup"`
-	} `json:"entitlements"`
-}
-
-//	I HAVE ALREADY RAN THIS!! CHECK INFO.TXT FOR TIME AND DATE INFORMATION TO PARSE
-
-func main() {
-
+func loadEnvVariables() map[string]string {
 	err := godotenv.Load()
-	check(err)
-	dellClientId := os.Getenv("DELL_CLIENT_ID")
-	dellClientSecret := os.Getenv("DELL_CLIENT_SECRET")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return map[string]string{
+		"DELL_CLIENT_ID":     os.Getenv("DELL_CLIENT_ID"),
+		"DELL_CLIENT_SECRET": os.Getenv("DELL_CLIENT_SECRET"),
+		"DELL_ACCESS":        os.Getenv("DELL_ACCESS"),
+		"DELL_EXPIRES":       os.Getenv("DELL_EXPIRES"),
+	}
+}
 
-	response, err := requests.Post("assets/?$s=16000&$o=AssetTag&$d=Ascending&$filter=(ManufacturerId%20eq%20'%5B518000c0-4dff-e511-a789-005056bb000e%5D')", strings.NewReader(``))
-	check(err)
+func requestToResponse[T any](req *http.Request, model *T) T {
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer res.Body.Close()
 
-	schema := models.MultipleAssets{}
-	err = json.Unmarshal(response, &schema)
-	check(err)
-
-	access := DellResponse{}
-	if os.Getenv("DELL_ACCESS") == "" {
-		payload := "client_id=" + dellClientId + "&client_secret=" + dellClientSecret + "&grant_type=client_credentials"
-
-		request, err := requests.NewRequest("POST", "apigtwb2c.us.dell.com/auth/oauth/v2/token", "", strings.NewReader(payload))
-		check(err)
-
-		request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-
-		res, err := http.DefaultClient.Do(request)
-		check(err)
-		defer res.Body.Close()
-		body, err := io.ReadAll(res.Body)
-		check(err)
-
-		fmt.Println(string(body))
-
-		err = json.Unmarshal(body, &access)
-		check(err)
-	} else {
-		access.AccessToken = os.Getenv("DELL_ACCESS")
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		log.Fatalln(err)
 	}
 
-	file, err := os.Create("info.txt")
-	check(err)
+	if err = json.Unmarshal(body, &model); err != nil {
+		log.Fatalln(err)
+	}
 
-	defer file.Close()
+	return *model
+}
 
-	batch := 100
+func run() {
+	updates := make([]models.Asset, 0)
+	env := loadEnvVariables()
+	iiqAssets := getDellDevices()
 
-	for i := 0; i < len(schema.Assets); i += batch {
-		j := i + batch
-		if j > len(schema.Assets) {
-			j = len(schema.Assets)
+	dell := Dell{
+		Site:  "apigtwb2c.us.dell.com/auth/oauth/v2/token",
+		Token: env["DELL_ACCESS"],
+	}
+
+	if dell.Token == "" {
+		dell.getAccessToken(env["DELL_CLIENT_ID"], env["DELL_CLIENT_SECRET"])
+
+		env["DELL_ACCESS"] = dell.Token
+		godotenv.Write(env, ".env")
+	}
+
+	fmt.Println("get dell warranties, by batches of 100")
+	for begin, size := 0, 100; begin < len(iiqAssets.Assets); begin += size {
+		end := begin + size
+		if end > len(iiqAssets.Assets) {
+			end = len(iiqAssets.Assets)
 		}
 
-		batchAssets := schema.Assets[i:j]
-		assets := make([]string, 1, 100)
+		batch := iiqAssets.Assets[begin:end]
+		serials := make([]string, 0, size)
 
-		for idx, asset := range batchAssets {
-			if idx == 0 {
-				assets[idx] = asset.SerialNumber
+		for k := range batch {
+			if batch[k].WarrantyExpirationDate == "" &&
+				batch[k].SerialNumber != "" {
+				serials = append(serials, batch[k].SerialNumber)
 			}
-
-			if asset.SerialNumber != "" {
-				assets = append(assets, asset.SerialNumber)
-			}
 		}
 
-		serials := strings.Join(assets, ",")
+		tags := strings.Join(serials, ",")
 
-		if strings.Contains(serials, ",,") {
-			fmt.Println(serials)
-			check(errors.New("the provided string " + serials + " is invalid"))
+		if strings.Contains(tags, ",,") {
+			fmt.Println(tags)
+			panic(errors.New("the provided string " + tags + " is invalid"))
 		}
 
-		req, err := requests.NewRequest("GET", "apigtwb2c.us.dell.com/PROD/sbil/eapi/v5/asset-entitlements", "?servicetags="+serials, strings.NewReader(``))
-		check(err)
+		site := "apigtwb2c.us.dell.com/PROD/sbil/eapi/v5/asset-entitlements"
+		req, err := requests.NewRequest("GET", site, "?servicetags="+tags, "")
+		if err != nil {
+			log.Fatalln(err)
+		}
 
 		req.Header.Add("Accept", "application/json")
-		req.Header.Add("Authorization", "Bearer "+access.AccessToken)
+		req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", dell.Token))
 
-		res, err := http.DefaultClient.Do(req)
-		check(err)
-		defer res.Body.Close()
-		body, err := io.ReadAll(res.Body)
-		check(err)
+		dellAssets := requestToResponse(req, &DellAsset{})
 
-		dell := DellAsset{}
-		err = json.Unmarshal(body, &dell)
-		check(err)
-
-		for _, device := range dell {
-			if device.Invalid {
-				continue
-			}
-
-			entitle := len(device.Entitlements)
-			if entitle > 0 {
-				file.WriteString(device.ServiceTag + ": " + device.Entitlements[entitle-1].EndDate.String() + "\n")
-			}
-		}
+		updates = append(updates, addExpiration(dellAssets, batch)...)
 	}
+
+	fmt.Println(len(updates), "devices to update in IIQ")
+
+	updateAssets(updates)
+}
+
+func main() {
+	run()
 }
