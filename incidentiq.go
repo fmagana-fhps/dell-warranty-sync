@@ -75,9 +75,12 @@ func updateAssets(editedAssets []models.Asset) {
 			logger.Printf("DEBUG %s", payload)
 		}
 
-		// err = client.UpdateAsset("assets/"+asset.AssetID, payload)
+		err = client.UpdateAsset("assets/"+asset.AssetID, payload)
 		if err != nil {
 			log.Fatalln(err)
+		}
+		if debug {
+			logger.Printf("DEBUG %s has been updated", asset.AssetTag)
 		}
 	}
 }
