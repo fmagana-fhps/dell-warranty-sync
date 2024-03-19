@@ -3,7 +3,7 @@ module github.com/fmagana-fhps/dell-warranty-sync
 go 1.20
 
 require (
-	common v0.0.0-00010101000000-000000000000
+	github.com/fmagana-fhps/incidentiq-api-go v0.0.4
 	github.com/joho/godotenv v1.5.1
 )
 

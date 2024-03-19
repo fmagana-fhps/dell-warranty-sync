@@ -1,13 +1,12 @@
 package main
 
 import (
-	m "common/models"
-	r "common/requests"
+	"github.com/fmagana-fhps/incidentiq-api-go/models"
 	"fmt"
 	"time"
 )
 
-type DellAsset []struct {
+type DellAssets []struct {
 	ID                     int       `json:"id"`
 	ServiceTag             string    `json:"serviceTag"`
 	OrderBuid              int       `json:"orderBuid"`
@@ -43,7 +42,7 @@ func (d *Dell) getAccessToken(id, secret string) {
 		"&client_secret=" + secret +
 		"&grant_type=client_credentials"
 
-	request, err := r.NewRequest("POST", d.Site, "", payload)
+	request, err := NewRequest("POST", d.Site, "", payload)
 	if err != nil {
 		panic(err)
 	}
@@ -53,8 +52,8 @@ func (d *Dell) getAccessToken(id, secret string) {
 	requestToResponse(request, d)
 }
 
-func addExpiration(dell DellAsset, batch []m.Asset) []m.Asset {
-	var list []m.Asset
+func addExpiration(dell DellAssets, batch []models.Asset) []models.Asset {
+	var list []models.Asset
 
 	for i := range dell {
 		if dell[i].Invalid {
