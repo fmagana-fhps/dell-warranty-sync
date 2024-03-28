@@ -41,6 +41,7 @@ func NewRequest(method, site, params, payload string) (*http.Request, error) {
 	if debug { logger.Printf("DEBUG %s", url) }
 	req, err := http.NewRequest(method, url, strings.NewReader(payload))
 	if debug { logger.Printf("DEBUG %+v %+v", req, err) }
+
 	if err != nil {
 		return nil, err
 	}
@@ -51,17 +52,17 @@ func NewRequest(method, site, params, payload string) (*http.Request, error) {
 func requestToResponse[T any](req *http.Request, model *T) T {
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	if err = json.Unmarshal(body, &model); err != nil {
-		log.Fatalln(err)
+		logger.Fatalln(err)
 	}
 
 	return *model
@@ -117,7 +118,7 @@ func run() {
 		site := "apigtwb2c.us.dell.com/PROD/sbil/eapi/v5/asset-entitlements"
 		req, err := NewRequest("GET", site, "?servicetags="+tags, "")
 		if err != nil {
-			log.Fatalln("error getting entitlements; " + err.Error())
+			logger.Fatalln("error getting entitlements; " + err.Error())
 		}
 
 		req.Header.Add("Accept", "application/json")
