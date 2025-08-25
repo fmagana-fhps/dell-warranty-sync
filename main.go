@@ -26,7 +26,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	file, err := os.OpenFile("C:\\Sched_Tasks\\dell_warranty.log", 
+	file, err := os.OpenFile("dell_warranty.log", 
 					os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)

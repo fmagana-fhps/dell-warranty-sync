@@ -47,10 +47,10 @@ func getDellDevices(client *iiq.Client) []models.Asset {
 }
 
 func updateAssets(editedAssets []models.Asset) {
-	for _, asset := range editedAssets {
-		copied := asset	
-		err := client.UpdateAsset("assets/"+copied.AssetID, copied)
-		if err != nil { logger.Fatalln(err, copied, asset) }
+	for i, asset := range editedAssets {
+		copied := asset
+		err := client.UpdateAsset(copied.AssetID, copied)
+		if err != nil { logger.Fatalln(err, i, copied.AssetID) }
 
 		if debug { logger.Printf("DEBUG %s has been updated", copied.AssetTag) }
 	}
